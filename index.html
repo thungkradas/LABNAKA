@@ -46,17 +46,24 @@
   function valid(t){ var p = t && payload(t); return !!(p && p.exp * 1000 > Date.now() + 30000); }
   function call(fn, args){
     return fetch(API, {method: 'POST', body: JSON.stringify({fn: fn, args: args})}).then(function(r){
-      if(!r.ok) throw new Error('ติดต่อเซิร์ฟเวอร์ไม่ได้ (' + r.status + ')');
-      return r.json();
-    }).catch(function(e){
-      throw new Error(/JSON|Unexpected token|Failed to fetch|NetworkError|Load failed/.test(String(e && e.message)) ? 'ติดต่อ Apps Script ไม่ได้ ผู้ดูแลต้องตั้ง Deploy เป็น Execute as: Me และ Who has access: ทุกคน (Anyone)' : e.message);
+      return r.text().then(function(t){
+        try{ return JSON.parse(t); }catch(e){
+          var d = document.createElement('div'); d.innerHTML = t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
+          var txt = (d.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 220);
+          if(/accounts\.google\.com|ServiceLogin|signin/i.test(t + r.url)) throw new Error('Apps Script ยังต้องล็อกอิน: ตั้ง Deploy เป็น Who has access: ทุกคน (Anyone) แล้วกด New version');
+          throw new Error('Apps Script ตอบกลับเป็นข้อผิดพลาด (' + r.status + '): ' + (txt || 'ไม่มีข้อความ') + ' · แก้ใน รหัส.gs แล้ว Deploy → Manage deployments → ✏️ → New version');
+        }
+      });
+    }, function(e){
+      throw new Error('ติดต่อ Apps Script ไม่ได้ (' + (e && e.message) + ') · ตรวจว่า Deploy เป็น Execute as: Me และ Who has access: ทุกคน (Anyone)');
     });
   }
   function loadApp(tok){
     busy(true, 'กำลังโหลดคู่มือ…');
     call('getApp', [tok]).then(function(r){
       if(!r || !r.ok){ set('gsitoken', ''); busy(false); msg((r && r.error) || 'เข้าไม่ได้', true); if(gisReady) showButton(); else initLogin(true); return; }
-      document.open(); document.write(r.html); document.close();
+      var html = String(r.html || '').replace(/const LAB_API = '[^']*';/, function(){ return "const LAB_API = '" + API.replace(/\//g, '\\/') + "';"; });
+      document.open(); document.write(html); document.close();
     }).catch(function(e){ busy(false); msg(e.message, true); if(gisReady) showButton(); else initLogin(true); });
   }
   var gisReady = false, clientId = '';
