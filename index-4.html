@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>How to do lab</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍎</text></svg>">
+<style>
+  :root{--bg:#f3f8ff; --card:#fff; --fg:#14213d; --muted:#5b6b86; --acc:#2563eb; --line:#dbe6f5; --err:#b42318; --errbg:#fff1f0}
+  @media (prefers-color-scheme: dark){:root{--bg:#0f172a; --card:#162033; --fg:#e8eefc; --muted:#9fb0cf; --acc:#7aa7ff; --line:#2a3854; --err:#ffb4a8; --errbg:#3a1d1d}}
+  *{box-sizing:border-box}
+  html,body{margin:0; min-height:100%; background:var(--bg); color:var(--fg); font-family:system-ui,-apple-system,"Segoe UI","Noto Sans Thai",sans-serif}
+  .wrap{min-height:100vh; display:grid; place-items:center; padding:24px 16px}
+  .card{width:100%; max-width:380px; background:var(--card); border:1px solid var(--line); border-radius:24px; padding:32px 24px; text-align:center; box-shadow:0 10px 30px rgba(20,33,61,.08)}
+  .logo{font-size:56px; line-height:1}
+  h1{margin:12px 0 4px; font-size:1.6rem}
+  p{margin:0; color:var(--muted); line-height:1.6}
+  #btn{display:flex; justify-content:center; min-height:44px; margin:22px 0 6px}
+  #msg{margin-top:12px; font-size:.92rem; line-height:1.6; min-height:1.6em}
+  #msg.err{color:var(--err); background:var(--errbg); border-radius:12px; padding:10px 12px}
+  .spin{width:28px; height:28px; border:3px solid var(--line); border-top-color:var(--acc); border-radius:50%; margin:18px auto 0; animation:sp 1s linear infinite}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap"><div class="card">
+  <div class="logo" aria-hidden="true">🍎</div>
+  <h1>How to do lab</h1>
+  <p>เข้าสู่ระบบด้วยบัญชี Google ที่ผู้ดูแลอนุญาต</p>
+  <div id="btn"></div>
+  <div class="spin" id="spin" hidden></div>
+  <div id="msg" role="status" aria-live="polite"></div>
+</div></div>
+<script>
+(function(){
+  var API = 'https://script.google.com/macros/s/AKfycbyGRu7XP9Iyd0DES6qwTX5DK5lhra8n2lT7mv6uL3CpBsYo4kG0W0Mn5qsaXVi5ZtXkwA/exec';
+  var K = 'htdl:';
+  function get(k){ try{ return localStorage.getItem(K + k) || ''; }catch(e){ return ''; } }
+  function set(k, v){ try{ localStorage.setItem(K + k, v); }catch(e){} }
+  function el(id){ return document.getElementById(id); }
+  function msg(t, err){ var m = el('msg'); m.textContent = t || ''; m.className = err ? 'err' : ''; }
+  function busy(on, t){ el('spin').hidden = !on; el('btn').hidden = !!on; if(t !== undefined) msg(t); }
+  function payload(t){ try{ var b = t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); return JSON.parse(decodeURIComponent(escape(atob(b + '==='.slice((b.length + 3) % 4))))); }catch(e){ return null; } }
+  function valid(t){ var p = t && payload(t); return !!(p && p.exp * 1000 > Date.now() + 30000); }
+  function call(fn, args){
+    return fetch(API, {method: 'POST', body: JSON.stringify({fn: fn, args: args})}).then(function(r){
+      if(!r.ok) throw new Error('ติดต่อเซิร์ฟเวอร์ไม่ได้ (' + r.status + ')');
+      return r.json();
+    }).catch(function(e){
+      throw new Error(/JSON|Unexpected token|Failed to fetch|NetworkError|Load failed/.test(String(e && e.message)) ? 'ติดต่อ Apps Script ไม่ได้ ผู้ดูแลต้องตั้ง Deploy เป็น Execute as: Me และ Who has access: ทุกคน (Anyone)' : e.message);
+    });
+  }
+  function loadApp(tok){
+    busy(true, 'กำลังโหลดคู่มือ…');
+    call('getApp', [tok]).then(function(r){
+      if(!r || !r.ok){ set('gsitoken', ''); busy(false); msg((r && r.error) || 'เข้าไม่ได้', true); if(gisReady) showButton(); else initLogin(true); return; }
+      document.open(); document.write(r.html); document.close();
+    }).catch(function(e){ busy(false); msg(e.message, true); if(gisReady) showButton(); else initLogin(true); });
+  }
+  var gisReady = false, clientId = '';
+  function showButton(){
+    if(!gisReady) return;
+    var b = el('btn'); b.hidden = false;
+    if(!b.childElementCount) google.accounts.id.renderButton(b, {theme: 'outline', size: 'large', shape: 'pill', text: 'signin_with', locale: 'th', width: 260});
+  }
+  function onCred(resp){ set('gsitoken', resp.credential); set('gsiseen', '1'); msg(''); loadApp(resp.credential); }
+  function startGis(){
+    var s = document.createElement('script'); s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
+    s.onload = function(){
+      try{
+        google.accounts.id.initialize({client_id: clientId, callback: onCred, auto_select: true, cancel_on_tap_outside: true, use_fedcm_for_prompt: true});
+        gisReady = true; el('spin').hidden = true; showButton();
+        if(get('gsiseen') && !el('msg').textContent) google.accounts.id.prompt();
+      }catch(e){ busy(false); msg('โหลดปุ่มเข้าสู่ระบบไม่ได้', true); }
+    };
+    s.onerror = function(){ busy(false); msg('โหลดปุ่มเข้าสู่ระบบของ Google ไม่ได้ ตรวจอินเทอร์เน็ต', true); };
+    document.head.appendChild(s);
+  }
+  function initLogin(keepMsg){
+    busy(true); if(!keepMsg) msg('');
+    call('whoami', ['']).then(function(w){
+      clientId = (w && w.clientId) || '';
+      if(!clientId){ busy(false); msg('ผู้ดูแลยังไม่ได้ใส่ GOOGLE_CLIENT_ID ใน Code.gs', true); return; }
+      startGis();
+    }).catch(function(e){ busy(false); msg(e.message, true); });
+  }
+  var tok = get('gsitoken');
+  if(valid(tok)) loadApp(tok); else initLogin();
+})();
+</script>
+</body>
+</html>
